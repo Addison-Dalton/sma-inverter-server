@@ -2,13 +2,14 @@
 
 This is a simple, and crappy, express server to expose data from my SMA inverters. It accomplishes this by communicating directly with the inverters on my local network.
 
+It's primary purpose is to supply the current watt generation to a [tidbyt app](https://github.com/Addison-Dalton/tidbyt-solar-generation).
+
 ## Setup
 
 1. Install the dependencies
 2. Copy the `.env.sample`, and rename is to `.env`. (See [Configuration](#configuration))
 
 ## Configuration
-
 The sample env includes comments to better explain what each is for. That being said, some deserver additional explaination:
 
 - **Inverter IPs**: Fairly straightforward, corresponds to the IP address for each inverter.
