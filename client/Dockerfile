@@ -1,4 +1,8 @@
 FROM alpine
+RUN apk add --no-cache tzdata
+ENV TZ=America/New_York
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
 ENV GOPATH /usr/local/go
 ENV REPO $GOPATH/pixlet
 ENV PATH "${PATH}:${GOPATH}/bin:${REPO}"
