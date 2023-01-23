@@ -25,8 +25,10 @@ class Inverter {
     if (!data?.result?.sid) {
       console.error('Unable to access sid');
       this.sid = '';
+    } else {
+      this.sid = data?.result?.sid;
+      console.info(`Retrieved new sid: ${this.sid}`);
     }
-    this.sid = data?.result?.sid;
   }
 
   async getCurrentWatts() {
@@ -52,9 +54,9 @@ class Inverter {
     );
 
     const data = await response.json();
-    console.log('INVETER DATA', JSON.stringify(data, null, 2));
     // inverterSid is stale, request new one
     if (data?.err === 401) {
+      console.info('Stale sid, requesting new one');
       this.sid = '';
       this.wattCallCount++;
       return this.getCurrentWatts();
@@ -65,12 +67,15 @@ class Inverter {
 
   parseWattResponseData(data) {
     try {
-      const watt =
+      const watts =
         data.result[this.inverterDataId][
           process.env.INVERTER_LIVE_WATT_DATA_KEY
         ]['1'][0].val || 0;
       this.wattCallCount = 0;
-      return watt;
+      console.info(
+        `Inverter with IP ${this.inverterIp} is currently generating ${watts}w`
+      );
+      return watts;
     } catch (e) {
       console.error('Unable to extract live data: error in parsing data.');
       return 0;

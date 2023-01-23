@@ -1,33 +1,20 @@
 # sma-inverter-server
+This project includes an express server and client pixlet app. Combined, these provide live watt generation from my solar inverters. Please see the README in the server and client directories for more information on each.
 
-This is a simple, and crappy, express server to expose data from my SMA inverters. It accomplishes this by communicating directly with the inverters on my local network.
-
-It's primary purpose is to supply the current watt generation to a [tidbyt app](https://github.com/Addison-Dalton/tidbyt-solar-generation).
-
-## Setup
-
-1. Install the dependencies
-2. Copy the `.env.sample`, and rename is to `.env`. (See [Configuration](#configuration))
+This is only intended to run on my local network, as the server must call the inverters directly. That being said, should anyone else be interested, there's the possibility it can be configured to run on another network with a similar setup.
 
 ## Configuration
-The sample env includes comments to better explain what each is for. That being said, some deserver additional explaination:
+1. Copy the `.env.sample` file and rename it to `.env`. Fill in the empty variables present.
+2. Within the `server` directory, copy the `.env.sample` file and rename it to `env.local`. Fill in the empty variables present. The README for the server provides additional configuration information.
 
-- **Inverter IPs**: Fairly straightforward, corresponds to the IP address for each inverter.
-- **Watt generation data key**: The various data values that can be returned from the `getValues.json` endpoint have corresponding "keys". This key appears to match with the HTML element id that represents it. That's how I found the current watt generation data key.
-- **Inverter Data Ids**: The returned JSON response from `getValues.json` has a unique key (to each inverter) as part of the object.
+## Running
+Once all the `.env` files are set, you should only have to run `docker compose up`.
 
-## SMA Communication
+## Docker setup
+The docker container has two images. One for the express server, and the other for the pixlet app. It first setups the express server, and then the client. The client is configured to handle a cron job to "render and push" the pixlet app to a tidbyt every 30 seconds.
 
-To make calls to the inverter's `getValues.json`, you need an `sid`. If an `sid` has not be set, it will first call the `login.json` to attain one, then it will request `getValues.json` to attain the current watt generation.
-
-Secondally, the sid will eventually become stale. The `getValues.json` will return a {"err": 401} JSON response (Why it doesn't just return a proper status code, I can't say). When this occurs, an attempt will be made to attain another `sid`.
-
-There's a limit on how many failed calls can be made. If that limit is hit, the server will need to be restarted.
-
-## Endpoints
-
-- `/data/live` - returns the current watt generation by both inverters.
-
-  ```json
-  { "watts": 0 }
-  ```
+## Credits
+Below are some resources which aided in the creation of this project:
+- [Pixlet docs](https://github.com/tidbyt/pixlet): Referenced often on how to build the pixlet app.
+- [Cron + Docker = The Easiest Job Scheduler You’ll Ever Create](https://levelup.gitconnected.com/cron-docker-the-easiest-job-scheduler-youll-ever-create-e1753eb5ea44): Great article on using cron and docker together.
+- [Pixlet-docker](https://github.com/eyeats/pixlet-docker): Borrowed code on how to setup a docker env to run pixlet commands in.

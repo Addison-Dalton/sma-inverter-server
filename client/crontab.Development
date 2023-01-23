@@ -1,0 +1,3 @@
+# hacky solution to run every 30 seconds
+* * * * * /live-solar/render-and-push.sh
+* * * * * (sleep 30 ; /live-solar/render-and-push.sh)
