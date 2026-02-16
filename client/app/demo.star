@@ -1,21 +1,33 @@
 load("render.star", "render")
-load("http.star", "http")
-load("cache.star", "cache")
 
-SERVER_PORT = "3005"
-INVERTER_DOCKER_SERVER_HOST = "http://host.docker.internal:" + SERVER_PORT
-INVERTER_STATS_ENDPOINT = INVERTER_DOCKER_SERVER_HOST + "/api/daily/stats"
-STATS_CACHE_KEY = "daily_stats"
+# Mock data for demonstration
+def getMockStats():
+    return {
+        "date": "2026-02-16",
+        "currentWatts": 1234,
+        "totalYieldWh": 18517,
+        "totalYieldKwh": "18.5",
+        "peakWatts": 4200,
+        "peakTime": "13:15",
+        "hourlyData": [
+            {"hour": 8, "avgWatts": 450, "maxWatts": 600},
+            {"hour": 9, "avgWatts": 1200, "maxWatts": 1450},
+            {"hour": 10, "avgWatts": 2100, "maxWatts": 2400},
+            {"hour": 11, "avgWatts": 3200, "maxWatts": 3600},
+            {"hour": 12, "avgWatts": 3900, "maxWatts": 4200},
+            {"hour": 13, "avgWatts": 4000, "maxWatts": 4200},
+            {"hour": 14, "avgWatts": 3800, "maxWatts": 4100},
+            {"hour": 15, "avgWatts": 3200, "maxWatts": 3500},
+            {"hour": 16, "avgWatts": 2400, "maxWatts": 2700},
+            {"hour": 17, "avgWatts": 1600, "maxWatts": 1800},
+            {"hour": 18, "avgWatts": 900, "maxWatts": 1100},
+            {"hour": 19, "avgWatts": 400, "maxWatts": 500},
+            {"hour": 20, "avgWatts": 100, "maxWatts": 150},
+        ],
+    }
 
 def main():
-    stats = getDailyStats()
-
-    if stats == None or stats.get("currentWatts") == None:
-        return render.Root(
-            child = render.Box(
-                child = render.Text("Loading...", font = "tom-thumb"),
-            ),
-        )
+    stats = getMockStats()
 
     return render.Root(
         delay = 600,
@@ -130,28 +142,3 @@ def getWattColor(watts):
         return "#FFA500"  # Orange - low
     else:
         return "#666666"  # Dim - nighttime
-
-def getDailyStats():
-    """Fetch daily stats with caching"""
-    cached = cache.get(STATS_CACHE_KEY)
-    if cached != None:
-        print("Cache hit! Using cached stats")
-        return cached
-
-    stats = fetchDailyStats()
-    if stats != None:
-        cache.set(STATS_CACHE_KEY, stats, ttl_seconds = 60)
-    return stats
-
-def fetchDailyStats():
-    """Fetch daily statistics from server"""
-    print("Fetching daily stats from: " + INVERTER_STATS_ENDPOINT)
-
-    rep = http.get(INVERTER_STATS_ENDPOINT, ttl_seconds = 30)
-
-    if rep.status_code != 200:
-        print("Request failed with status %d" % rep.status_code)
-        # Try to return cached data even if expired
-        return cache.get(STATS_CACHE_KEY)
-
-    return rep.json()
