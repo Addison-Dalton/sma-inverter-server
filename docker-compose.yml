@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: sma-inverter-server
+    ports:
+      - "3005:3005"
+    volumes:
+      # Mount .env.local for configuration
+      - ./server/.env.local:/app/.env.local:ro
+      # Mount data directory for SQLite database persistence
+      - ./server/data:/app/data
+    restart: unless-stopped
+    networks:
+      - sma-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3005/health/inverters"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: sma-inverter-client
+    depends_on:
+      server:
+        condition: service_healthy
+    environment:
+      - TIDBYT_DEVICE_ID=${TIDBYT_DEVICE_ID}
+      - TIDBYT_API_TOKEN=${TIDBYT_API_TOKEN}
+      - SCHEDULER_ENVIRONMENT=Development
+    volumes:
+      # Mount the Pixlet app
+      - ./client/app:/live-solar/app:ro
+    restart: unless-stopped
+    networks:
+      - sma-network
+    extra_hosts:
+      # Allow client container to reach server via host.docker.internal
+      - "host.docker.internal:host-gateway"
+
+networks:
+  sma-network:
+    driver: bridge
