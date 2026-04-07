@@ -1,6 +1,7 @@
 load("render.star", "render")
 load("http.star", "http")
 load("cache.star", "cache")
+load("encoding/json.star", "json")
 
 SERVER_PORT = "3005"
 INVERTER_DOCKER_SERVER_HOST = "http://host.docker.internal:" + SERVER_PORT
@@ -62,62 +63,53 @@ def renderTopRow(stats):
 def renderGraph(stats):
     hourlyData = stats.get("hourlyData", [])
 
-    if len(hourlyData) == 0:
-        return render.Box(
-            width = 64,
-            height = 18,
-            child = render.Text("No data", font = "tom-thumb", color = "#666"),
-        )
+    # Build hour -> data lookup so we can fill all time slots
+    hourMap = {}
+    for h in hourlyData:
+        hourMap[h.get("hour")] = h
 
-    # Find max watts for scaling
+    # Find max watts across all hours for scaling
     maxWatts = 0
-    for hour in hourlyData:
-        if hour.get("maxWatts", 0) > maxWatts:
-            maxWatts = hour["maxWatts"]
-
+    for h in hourlyData:
+        if h.get("maxWatts", 0) > maxWatts:
+            maxWatts = h["maxWatts"]
     if maxWatts == 0:
         maxWatts = 1  # Avoid division by zero
 
-    # Calculate bar width - we have up to 14 hours (8 AM to 9 PM)
-    # With 64 pixels and some padding, use ~4 pixels per bar
     barWidth = 4
     graphHeight = 18
 
+    # Always render all hours 8am-9pm as fixed time positions (left = morning, right = evening)
     bars = []
-    for hour in hourlyData:
-        avgWatts = hour.get("avgWatts", 0)
+    for h in range(8, 22):
+        hourData = hourMap.get(h, {})
+        avgWatts = hourData.get("avgWatts", 0)
 
-        # Scale bar height (0 to graphHeight pixels)
         barHeight = int((avgWatts / maxWatts) * graphHeight)
         if barHeight < 1 and avgWatts > 0:
-            barHeight = 1  # Show at least 1 pixel if generating
+            barHeight = 1
 
-        # Create spacer to push bar to bottom
         spacerHeight = graphHeight - barHeight
 
-        bars.append(
-            render.Column(
-                main_align = "end",
-                cross_align = "center",
-                children = [
-                    render.Box(width = barWidth, height = spacerHeight),
-                    render.Box(
-                        width = barWidth - 1,  # Leave 1px gap between bars
-                        height = barHeight,
-                        color = "#FFD700",  # Golden color
-                    ),
-                ],
-            ),
-        )
+        bar_children = [render.Box(width = barWidth, height = spacerHeight)]
+        if barHeight > 0:
+            bar_children.append(render.Box(
+                width = barWidth - 1,
+                height = barHeight,
+                color = "#FFD700",
+            ))
 
-    return render.Box(
-        width = 64,
-        height = graphHeight,
-        child = render.Row(
-            main_align = "start",
-            cross_align = "end",
-            children = bars,
-        ),
+        bars.append(render.Column(
+            main_align = "end",
+            cross_align = "center",
+            children = bar_children,
+        ))
+
+    return render.Row(
+        expanded = True,
+        main_align = "start",
+        cross_align = "end",
+        children = bars,
     )
 
 def getWattColor(watts):
@@ -136,11 +128,11 @@ def getDailyStats():
     cached = cache.get(STATS_CACHE_KEY)
     if cached != None:
         print("Cache hit! Using cached stats")
-        return cached
+        return json.decode(cached)
 
     stats = fetchDailyStats()
     if stats != None:
-        cache.set(STATS_CACHE_KEY, stats, ttl_seconds = 60)
+        cache.set(STATS_CACHE_KEY, json.encode(stats), ttl_seconds = 60)
     return stats
 
 def fetchDailyStats():

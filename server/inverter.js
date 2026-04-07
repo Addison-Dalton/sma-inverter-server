@@ -6,7 +6,7 @@ class Inverter {
   inverterIp;
   httpAgent;
   sid = '';
-  wattCallCount = 0;
+  sidRefreshPromise = null;
 
   constructor(inverterIp, inverterDataId, httpAgent, sid = '') {
     this.inverterIp = inverterIp;
@@ -31,15 +31,26 @@ class Inverter {
     }
   }
 
-  async getCurrentWatts() {
-    if (this.wattCallCount === MAX_WATT_CALL_COUNT) {
+  // Ensures a valid SID exists, deduplicating concurrent refresh requests
+  async ensureSid() {
+    if (this.sid) return;
+    if (this.sidRefreshPromise) {
+      await this.sidRefreshPromise;
+      return;
+    }
+    this.sidRefreshPromise = this.setSid().finally(() => {
+      this.sidRefreshPromise = null;
+    });
+    await this.sidRefreshPromise;
+  }
+
+  async getCurrentWatts(retryCount = 0) {
+    if (retryCount >= MAX_WATT_CALL_COUNT) {
       console.error('Unable to extract live data: max live value calls made.');
       return 0;
     }
 
-    if (!this.sid) {
-      await this.setSid();
-    }
+    await this.ensureSid();
 
     const response = await fetch(
       `https://${this.inverterIp}/dyn/getValues.json?sid=${this.sid}`,
@@ -58,8 +69,7 @@ class Inverter {
     if (data?.err === 401) {
       console.info('Stale sid, requesting new one');
       this.sid = '';
-      this.wattCallCount++;
-      return this.getCurrentWatts();
+      return this.getCurrentWatts(retryCount + 1);
     } else {
       return this.parseWattResponseData(data);
     }
@@ -71,7 +81,6 @@ class Inverter {
         data.result[this.inverterDataId][
           process.env.INVERTER_LIVE_WATT_DATA_KEY
         ]['1'][0].val || 0;
-      this.wattCallCount = 0;
       console.info(
         `Inverter with IP ${this.inverterIp} is currently generating ${watts}w`
       );
@@ -85,8 +94,8 @@ class Inverter {
   async testConnectivity() {
     const startTime = Date.now();
     try {
-      // Test authentication
-      await this.setSid();
+      // Ensure we have a session (reuse existing one if still valid)
+      await this.ensureSid();
 
       if (!this.sid) {
         return {
@@ -118,15 +127,13 @@ class Inverter {
     }
   }
 
-  async getMultipleValues(keys) {
-    if (this.wattCallCount === MAX_WATT_CALL_COUNT) {
+  async getMultipleValues(keys, retryCount = 0) {
+    if (retryCount >= MAX_WATT_CALL_COUNT) {
       console.error('Unable to fetch multiple values: max call count reached.');
       return {};
     }
 
-    if (!this.sid) {
-      await this.setSid();
-    }
+    await this.ensureSid();
 
     const response = await fetch(
       `https://${this.inverterIp}/dyn/getValues.json?sid=${this.sid}`,
@@ -146,8 +153,7 @@ class Inverter {
     if (data?.err === 401) {
       console.info('Stale sid, requesting new one for multiple values');
       this.sid = '';
-      this.wattCallCount++;
-      return this.getMultipleValues(keys);
+      return this.getMultipleValues(keys, retryCount + 1);
     }
 
     // Parse and return values for each key
@@ -159,7 +165,6 @@ class Inverter {
           results[key] = keyData;
         }
       }
-      this.wattCallCount = 0;
       return results;
     } catch (e) {
       console.error('Unable to parse multiple values response:', e);
@@ -167,15 +172,13 @@ class Inverter {
     }
   }
 
-  async getDailyYield() {
-    if (this.wattCallCount === MAX_WATT_CALL_COUNT) {
+  async getDailyYield(retryCount = 0) {
+    if (retryCount >= MAX_WATT_CALL_COUNT) {
       console.error('Unable to fetch daily yield: max call count reached.');
       return 0;
     }
 
-    if (!this.sid) {
-      await this.setSid();
-    }
+    await this.ensureSid();
 
     const response = await fetch(
       `https://${this.inverterIp}/dyn/getValues.json?sid=${this.sid}`,
@@ -195,8 +198,7 @@ class Inverter {
     if (data?.err === 401) {
       console.info('Stale sid, requesting new one for daily yield');
       this.sid = '';
-      this.wattCallCount++;
-      return this.getDailyYield();
+      return this.getDailyYield(retryCount + 1);
     }
 
     // Parse daily yield value
@@ -205,7 +207,6 @@ class Inverter {
         data.result?.[this.inverterDataId]?.[
           process.env.INVERTER_DAILY_YIELD_KEY
         ]?.['1']?.[0]?.val || 0;
-      this.wattCallCount = 0;
       console.info(
         `Inverter with IP ${this.inverterIp} daily yield: ${dailyYield}Wh`
       );

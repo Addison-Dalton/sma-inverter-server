@@ -67,11 +67,9 @@ class DataCollector {
 
       for (const inverter of this.inverters) {
         try {
-          // Get current watts and daily yield in parallel
-          const [watts, dailyYield] = await Promise.all([
-            inverter.getCurrentWatts(),
-            inverter.getDailyYield()
-          ]);
+          // Get current watts and daily yield sequentially to avoid concurrent SID conflicts
+          const watts = await inverter.getCurrentWatts();
+          const dailyYield = await inverter.getDailyYield();
 
           inverterData.push({
             id: inverter.inverterIp,
@@ -106,12 +104,15 @@ class DataCollector {
         );
       }
 
-      // Update hourly aggregate if we've moved to a new hour
-      if (this.lastHourProcessed !== currentHour) {
-        console.info(`Processing hourly aggregate for hour ${currentHour}`);
-        this.db.updateHourlyAggregate(currentDate, currentHour);
-        this.lastHourProcessed = currentHour;
+      // When the hour changes, finalize the just-completed hour
+      if (this.lastHourProcessed !== null && this.lastHourProcessed !== currentHour) {
+        console.info(`Finalizing hourly aggregate for completed hour ${this.lastHourProcessed}`);
+        this.db.updateHourlyAggregate(currentDate, this.lastHourProcessed);
       }
+      this.lastHourProcessed = currentHour;
+
+      // Always keep the current hour's aggregate fresh
+      this.db.updateHourlyAggregate(currentDate, currentHour);
 
       // Clean up old data once per day (at midnight)
       if (currentHour === 0 && this.lastHourProcessed === 23) {
